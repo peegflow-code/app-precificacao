@@ -29,9 +29,7 @@ st.title("📦 Produtos")
 st.caption(f"Empresa: {empresa_nome}")
 
 if st.session_state.get("mensagem_produto"):
-    st.success(
-        st.session_state.pop("mensagem_produto")
-    )
+    st.success(st.session_state.pop("mensagem_produto"))
 
 with st.expander("Cadastrar novo produto", expanded=True):
     with st.form("form_produto", clear_on_submit=True):
@@ -43,6 +41,7 @@ with st.expander("Cadastrar novo produto", expanded=True):
 
         with coluna2:
             categoria = st.text_input("Categoria")
+
             unidade = st.selectbox(
                 "Unidade de medida",
                 [
@@ -79,8 +78,7 @@ with st.expander("Cadastrar novo produto", expanded=True):
                 ).execute()
 
                 st.session_state["mensagem_produto"] = (
-                    f"Produto cadastrado com sucesso. "
-                    f"ID: {resposta_rpc.data}"
+                    f"Produto {nome.strip()} cadastrado com sucesso."
                 )
 
                 st.rerun()
@@ -89,15 +87,82 @@ with st.expander("Cadastrar novo produto", expanded=True):
                 mensagem = str(exc).lower()
 
                 if "produto_codigo_unico" in mensagem:
-                    st.error(
-                        "Já existe um produto com esse código."
-                    )
+                    st.error("Já existe um produto com esse código.")
                 elif "sem permissão" in mensagem:
                     st.error(
                         "Seu usuário não possui permissão "
                         "para cadastrar produtos."
                     )
                 else:
-                    st.error(
-                        f"Erro ao cadastrar produto: {exc}"
-                    )
+                    st.error(f"Erro ao cadastrar produto: {exc}")
+
+st.subheader("Produtos cadastrados")
+
+try:
+    resposta = (
+        supabase.table("produtos")
+        .select(
+            "id, codigo, nome, categoria, "
+            "unidade_medida, ativo, criado_em"
+        )
+        .eq("empresa_id", empresa_id)
+        .order("nome")
+        .execute()
+    )
+
+    produtos = resposta.data or []
+
+    if not produtos:
+        st.info("Nenhum produto cadastrado.")
+    else:
+        st.metric("Quantidade de produtos", len(produtos))
+
+        linhas = []
+
+        for produto in produtos:
+            linhas.append(
+                {
+                    "Código": produto.get("codigo") or "—",
+                    "Produto": produto.get("nome"),
+                    "Categoria": produto.get("categoria") or "—",
+                    "Unidade": produto.get("unidade_medida"),
+                    "Situação": (
+                        "Ativo"
+                        if produto.get("ativo")
+                        else "Inativo"
+                    ),
+                }
+            )
+
+        tabela = pd.DataFrame(linhas)
+
+        st.dataframe(
+            tabela,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Código": st.column_config.TextColumn(
+                    "Código",
+                    width="small",
+                ),
+                "Produto": st.column_config.TextColumn(
+                    "Produto",
+                    width="large",
+                ),
+                "Categoria": st.column_config.TextColumn(
+                    "Categoria",
+                    width="medium",
+                ),
+                "Unidade": st.column_config.TextColumn(
+                    "Unidade",
+                    width="small",
+                ),
+                "Situação": st.column_config.TextColumn(
+                    "Situação",
+                    width="small",
+                ),
+            },
+        )
+
+except Exception as exc:
+    st.error(f"Erro ao carregar produtos: {exc}")
