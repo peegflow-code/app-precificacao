@@ -62,7 +62,7 @@ with st.expander("Cadastrar novo produto", expanded=True):
             use_container_width=True,
         )
 
-        if salvar:
+    if salvar:
         if not nome.strip():
             st.error("Informe o nome do produto.")
         else:
