@@ -62,20 +62,18 @@ with st.expander("Cadastrar novo produto", expanded=True):
             st.error("Informe o nome do produto.")
         else:
             try:
-                (
-                    supabase.table("produtos")
-                    .insert(
+                    supabase.rpc(
+                    "cadastrar_produto",
                         {
-                            "empresa_id": empresa_id,
-                            "nome": nome.strip(),
-                            "codigo": codigo.strip() or None,
-                            "categoria": categoria.strip() or None,
-                            "unidade_medida": unidade,
-                            "ativo": True,
-                        }
+                            "p_empresa_id": empresa_id,
+                            "p_nome": nome.strip(),
+                            "p_codigo": codigo.strip() or None,
+                            "p_categoria": categoria.strip() or None,
+                            "p_unidade_medida": unidade,
+                            "p_ativo": True,
+                        },
                     )
                     .execute()
-                )
 
                 st.success("Produto cadastrado com sucesso.")
                 st.rerun()
