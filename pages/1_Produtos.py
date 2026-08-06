@@ -28,6 +28,11 @@ supabase = restaurar_cliente_autenticado()
 st.title("📦 Produtos")
 st.caption(f"Empresa: {empresa_nome}")
 
+if st.session_state.get("mensagem_produto"):
+    st.success(
+        st.session_state.pop("mensagem_produto")
+    )
+
 with st.expander("Cadastrar novo produto", expanded=True):
     with st.form("form_produto", clear_on_submit=True):
         coluna1, coluna2 = st.columns(2)
@@ -57,12 +62,12 @@ with st.expander("Cadastrar novo produto", expanded=True):
             use_container_width=True,
         )
 
-    if salvar:
+        if salvar:
         if not nome.strip():
             st.error("Informe o nome do produto.")
         else:
             try:
-                supabase.rpc(
+                resposta_rpc = supabase.rpc(
                     "cadastrar_produto",
                     {
                         "p_empresa_id": empresa_id,
@@ -73,68 +78,26 @@ with st.expander("Cadastrar novo produto", expanded=True):
                     },
                 ).execute()
 
-                st.success("Produto cadastrado com sucesso.")
+                st.session_state["mensagem_produto"] = (
+                    f"Produto cadastrado com sucesso. "
+                    f"ID: {resposta_rpc.data}"
+                )
+
                 st.rerun()
 
             except Exception as exc:
                 mensagem = str(exc).lower()
 
                 if "produto_codigo_unico" in mensagem:
-                    st.error("Já existe um produto com esse código.")
+                    st.error(
+                        "Já existe um produto com esse código."
+                    )
                 elif "sem permissão" in mensagem:
                     st.error(
                         "Seu usuário não possui permissão "
                         "para cadastrar produtos."
                     )
                 else:
-                    st.error(f"Erro ao cadastrar produto: {exc}")
-
-st.subheader("Produtos cadastrados")
-
-try:
-    resposta = (
-        supabase.table("produtos")
-        .select(
-            "id, codigo, nome, categoria, "
-            "unidade_medida, ativo, criado_em"
-        )
-        .eq("empresa_id", empresa_id)
-        .order("nome")
-        .execute()
-    )
-
-    produtos = resposta.data or []
-
-    if not produtos:
-        st.info("Nenhum produto cadastrado.")
-    else:
-        tabela = pd.DataFrame(produtos)
-
-        tabela = tabela.rename(
-            columns={
-                "codigo": "Código",
-                "nome": "Produto",
-                "categoria": "Categoria",
-                "unidade_medida": "Unidade",
-                "ativo": "Ativo",
-                "criado_em": "Criado em",
-            }
-        )
-
-        st.dataframe(
-            tabela[
-                [
-                    "Código",
-                    "Produto",
-                    "Categoria",
-                    "Unidade",
-                    "Ativo",
-                    "Criado em",
-                ]
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
-
-except Exception as exc:
-    st.error(f"Erro ao carregar produtos: {exc}")
+                    st.error(
+                        f"Erro ao cadastrar produto: {exc}"
+                    )
