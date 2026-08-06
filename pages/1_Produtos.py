@@ -62,25 +62,30 @@ with st.expander("Cadastrar novo produto", expanded=True):
             st.error("Informe o nome do produto.")
         else:
             try:
-                    supabase.rpc(
+                supabase.rpc(
                     "cadastrar_produto",
-                        {
-                            "p_empresa_id": empresa_id,
-                            "p_nome": nome.strip(),
-                            "p_codigo": codigo.strip() or None,
-                            "p_categoria": categoria.strip() or None,
-                            "p_unidade_medida": unidade,
-                            "p_ativo": True,
-                        },
-                    )
-                    .execute()
+                    {
+                        "p_empresa_id": empresa_id,
+                        "p_nome": nome.strip(),
+                        "p_codigo": codigo.strip() or None,
+                        "p_categoria": categoria.strip() or None,
+                        "p_unidade_medida": unidade,
+                    },
+                ).execute()
 
                 st.success("Produto cadastrado com sucesso.")
                 st.rerun()
 
             except Exception as exc:
-                if "produto_codigo_unico" in str(exc).lower():
+                mensagem = str(exc).lower()
+
+                if "produto_codigo_unico" in mensagem:
                     st.error("Já existe um produto com esse código.")
+                elif "sem permissão" in mensagem:
+                    st.error(
+                        "Seu usuário não possui permissão "
+                        "para cadastrar produtos."
+                    )
                 else:
                     st.error(f"Erro ao cadastrar produto: {exc}")
 
