@@ -16,10 +16,15 @@ st.set_page_config(
     page_title="Precifica Fácil",
     page_icon="💰",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 inicializar_sessao()
 
+
+# ==========================================================
+# LOGIN E CADASTRO
+# ==========================================================
 
 def tela_login() -> None:
     st.title("💰 Precifica Fácil")
@@ -37,9 +42,13 @@ def tela_login() -> None:
         )
 
         with aba_login:
-            with st.form("login"):
+            with st.form("form_login"):
                 email = st.text_input("E-mail")
-                senha = st.text_input("Senha", type="password")
+
+                senha = st.text_input(
+                    "Senha",
+                    type="password",
+                )
 
                 entrar = st.form_submit_button(
                     "Entrar",
@@ -48,7 +57,10 @@ def tela_login() -> None:
                 )
 
             if entrar:
-                sucesso, mensagem = fazer_login(email, senha)
+                sucesso, mensagem = fazer_login(
+                    email,
+                    senha,
+                )
 
                 if sucesso:
                     st.success(mensagem)
@@ -57,7 +69,7 @@ def tela_login() -> None:
                     st.error(mensagem)
 
         with aba_cadastro:
-            with st.form("cadastro"):
+            with st.form("form_cadastro"):
                 nome = st.text_input("Nome completo")
 
                 email_cadastro = st.text_input(
@@ -99,15 +111,39 @@ def tela_login() -> None:
                     st.error(mensagem)
 
 
-def tela_empresa() -> None:
+# ==========================================================
+# PRIMEIRA EMPRESA
+# ==========================================================
+
+def tela_primeira_empresa() -> None:
     st.title("Cadastre sua empresa")
 
-    with st.form("empresa"):
-        nome_fantasia = st.text_input("Nome fantasia *")
-        razao_social = st.text_input("Razão social")
+    st.info(
+        "Sua conta ainda não está vinculada a uma empresa."
+    )
+
+    with st.form("form_primeira_empresa"):
+        nome_fantasia = st.text_input(
+            "Nome fantasia *"
+        )
+
+        razao_social = st.text_input(
+            "Razão social"
+        )
+
         cnpj = st.text_input("CNPJ")
-        email = st.text_input("E-mail da empresa")
-        telefone = st.text_input("Telefone")
+
+        coluna1, coluna2 = st.columns(2)
+
+        with coluna1:
+            email = st.text_input(
+                "E-mail da empresa"
+            )
+
+        with coluna2:
+            telefone = st.text_input(
+                "Telefone"
+            )
 
         salvar = st.form_submit_button(
             "Criar empresa",
@@ -131,43 +167,126 @@ def tela_empresa() -> None:
             st.error(mensagem)
 
 
-def area_principal() -> None:
-    empresas = st.session_state.get("empresas_usuario", [])
+# ==========================================================
+# NAVEGAÇÃO
+# ==========================================================
 
-    if not empresas:
-        empresas = carregar_empresas_usuario()
-
-    if not empresas:
-        tela_empresa()
-        return
-
-    with st.sidebar:
-        st.header("Precifica Fácil")
-
-        empresa = empresas[0]
-
-        st.write(
-            f"Empresa: **{empresa['nome_fantasia']}**"
-        )
-
-        if st.button("Sair", use_container_width=True):
-            fazer_logout()
-            st.rerun()
-
-    st.title("Visão geral")
-
-    st.success(
-        f"Empresa ativa: {empresa['nome_fantasia']}"
+if not st.session_state.get("autenticado"):
+    pagina = st.navigation(
+        [
+            st.Page(
+                tela_login,
+                title="Entrar",
+                icon="🔐",
+            )
+        ],
+        position="hidden",
     )
 
-    coluna1, coluna2, coluna3 = st.columns(3)
-
-    coluna1.metric("Produtos", 0)
-    coluna2.metric("Despesas do mês", "R$ 0,00")
-    coluna3.metric("Cálculos realizados", 0)
+    pagina.run()
+    st.stop()
 
 
-if st.session_state.get("autenticado"):
-    area_principal()
-else:
-    tela_login()
+empresas = st.session_state.get("empresas_usuario", [])
+
+if not empresas:
+    empresas = carregar_empresas_usuario()
+
+if not empresas:
+    pagina = st.navigation(
+        [
+            st.Page(
+                tela_primeira_empresa,
+                title="Cadastrar empresa",
+                icon="🏢",
+            )
+        ],
+        position="hidden",
+    )
+
+    pagina.run()
+    st.stop()
+
+
+# ==========================================================
+# EMPRESA ATIVA
+# ==========================================================
+
+empresa_ativa_id = st.session_state.get(
+    "empresa_ativa_id"
+)
+
+ids_empresas = {
+    empresa["id"]
+    for empresa in empresas
+}
+
+if empresa_ativa_id not in ids_empresas:
+    st.session_state.empresa_ativa_id = empresas[0]["id"]
+    st.session_state.empresa_ativa_nome = empresas[0][
+        "nome_fantasia"
+    ]
+
+
+# ==========================================================
+# MENU DO SISTEMA
+# ==========================================================
+
+pagina = st.navigation(
+    {
+        "Sistema": [
+            st.Page(
+                "pages/0_Dashboard.py",
+                title="Visão geral",
+                icon="🏠",
+                default=True,
+            ),
+            st.Page(
+                "pages/1_Produtos.py",
+                title="Produtos",
+                icon="📦",
+            ),
+            st.Page(
+                "pages/2_Despesas.py",
+                title="Despesas",
+                icon="🧾",
+            ),
+            st.Page(
+                "pages/3_Calculadora.py",
+                title="Calculadora",
+                icon="🧮",
+            ),
+        ]
+    }
+)
+
+
+# ==========================================================
+# INFORMAÇÕES COMUNS DA BARRA LATERAL
+# ==========================================================
+
+with st.sidebar:
+    st.divider()
+
+    st.subheader("Precifica Fácil")
+
+    st.write(
+        "Empresa: "
+        f"**{st.session_state.get('empresa_ativa_nome')}**"
+    )
+
+    usuario = st.session_state.get("usuario")
+    email_usuario = getattr(usuario, "email", "")
+
+    if email_usuario:
+        st.caption(email_usuario)
+
+    if st.button(
+        "Sair",
+        use_container_width=True,
+    ):
+        fazer_logout()
+        st.rerun()
+
+
+pagina.run()

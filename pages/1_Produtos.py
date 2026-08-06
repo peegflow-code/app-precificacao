@@ -164,5 +164,70 @@ try:
             },
         )
 
+                st.divider()
+        st.subheader("Excluir produto")
+
+        produtos_por_rotulo = {
+            (
+                f"{produto['nome']} — "
+                f"{produto.get('codigo') or 'sem código'}"
+            ): produto
+            for produto in produtos
+        }
+
+        produto_selecionado_rotulo = st.selectbox(
+            "Selecione o produto",
+            options=list(produtos_por_rotulo.keys()),
+            key="produto_para_excluir",
+        )
+
+        produto_selecionado = produtos_por_rotulo[
+            produto_selecionado_rotulo
+        ]
+
+        confirmar_exclusao = st.checkbox(
+            (
+                "Confirmo que desejo excluir o produto "
+                f"{produto_selecionado['nome']}."
+            ),
+            key="confirmar_exclusao_produto",
+        )
+
+        if st.button(
+            "Excluir produto",
+            type="secondary",
+            use_container_width=True,
+            disabled=not confirmar_exclusao,
+        ):
+            try:
+                supabase.rpc(
+                    "excluir_produto",
+                    {
+                        "p_produto_id": (
+                            produto_selecionado["id"]
+                        )
+                    },
+                ).execute()
+
+                st.session_state["mensagem_produto"] = (
+                    "Produto excluído com sucesso."
+                )
+
+                st.rerun()
+
+            except Exception as exc:
+                mensagem = str(exc).lower()
+
+                if "possui cálculos no histórico" in mensagem:
+                    st.error(
+                        "Este produto possui cálculos salvos. "
+                        "Exclua primeiro os cálculos relacionados "
+                        "na página Calculadora."
+                    )
+                else:
+                    st.error(
+                        f"Erro ao excluir produto: {exc}"
+                    )
+
 except Exception as exc:
     st.error(f"Erro ao carregar produtos: {exc}")

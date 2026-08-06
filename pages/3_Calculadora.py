@@ -610,5 +610,74 @@ try:
             },
         )
 
+                st.divider()
+        st.subheader("Excluir cálculo do histórico")
+
+        calculos_por_rotulo = {}
+
+        for calculo in historico:
+            nome_produto = nomes_produtos.get(
+                calculo["produto_id"],
+                "Produto não encontrado",
+            )
+
+            rotulo = (
+                f"{nome_produto} | "
+                f"{calculo['mes_referencia']} | "
+                f"R$ {float(calculo['preco_varejo']):.2f} | "
+                f"{calculo['criado_em']}"
+            )
+
+            calculos_por_rotulo[rotulo] = calculo
+
+        calculo_selecionado_rotulo = st.selectbox(
+            "Selecione o cálculo",
+            options=list(calculos_por_rotulo.keys()),
+            key="calculo_para_excluir",
+        )
+
+        calculo_selecionado = calculos_por_rotulo[
+            calculo_selecionado_rotulo
+        ]
+
+        confirmar_exclusao_calculo = st.checkbox(
+            "Confirmo que desejo excluir este cálculo.",
+            key="confirmar_exclusao_calculo",
+        )
+
+        if st.button(
+            "Excluir cálculo",
+            type="secondary",
+            use_container_width=True,
+            disabled=not confirmar_exclusao_calculo,
+        ):
+            try:
+                supabase.rpc(
+                    "excluir_calculo_precificacao",
+                    {
+                        "p_calculo_id": (
+                            calculo_selecionado["id"]
+                        )
+                    },
+                ).execute()
+
+                st.session_state.pop(
+                    "ultimo_resultado",
+                    None,
+                )
+
+                st.session_state["mensagem_calculo"] = (
+                    "Cálculo excluído do histórico."
+                )
+
+                st.rerun()
+
+            except Exception as exc:
+                st.error(
+                    f"Erro ao excluir cálculo: {exc}"
+                )
+
+
+
 except Exception as exc:
     st.error(f"Erro ao carregar o histórico: {exc}")
