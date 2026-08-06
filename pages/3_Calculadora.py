@@ -610,7 +610,7 @@ try:
             },
         )
 
-                st.divider()
+        st.divider()
         st.subheader("Excluir cálculo do histórico")
 
         calculos_por_rotulo = {}
