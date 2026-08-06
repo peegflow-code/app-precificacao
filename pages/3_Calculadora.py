@@ -14,6 +14,10 @@ st.set_page_config(
     layout="wide",
 )
 
+# ==========================================================
+# VALIDAÇÃO DA SESSÃO
+# ==========================================================
+
 if not st.session_state.get("autenticado"):
     st.warning("Faça login pela página inicial.")
     st.stop()
@@ -28,6 +32,10 @@ if not empresa_id:
 supabase = restaurar_cliente_autenticado()
 
 
+# ==========================================================
+# FUNÇÕES AUXILIARES
+# ==========================================================
+
 def formatar_moeda(valor: float) -> str:
     return (
         f"R$ {valor:,.2f}"
@@ -37,11 +45,20 @@ def formatar_moeda(valor: float) -> str:
     )
 
 
+# ==========================================================
+# CABEÇALHO
+# ==========================================================
+
 st.title("🧮 Calculadora de preço de venda")
 st.caption(f"Empresa: {empresa_nome}")
 
 if st.session_state.get("mensagem_calculo"):
     st.success(st.session_state.pop("mensagem_calculo"))
+
+
+# ==========================================================
+# CARREGAR PRODUTOS
+# ==========================================================
 
 try:
     resposta_produtos = (
@@ -70,6 +87,11 @@ produtos_por_nome = {
     for produto in produtos
 }
 
+
+# ==========================================================
+# FORMULÁRIO DA CALCULADORA
+# ==========================================================
+
 with st.form("form_calculadora"):
     produto_nome = st.selectbox(
         "Produto",
@@ -94,59 +116,87 @@ with st.form("form_calculadora"):
             step=1,
         )
 
-    st.subheader("Custo direto da peça")
+    st.subheader("Custos totais do lote")
+
+    st.caption(
+        "Informe abaixo os custos totais utilizados para produzir "
+        "a quantidade de peças indicada acima."
+    )
 
     coluna1, coluna2 = st.columns(2)
 
     with coluna1:
         custo_insumos = st.number_input(
-            "Matéria-prima e insumos",
+            "Total de matéria-prima e insumos do lote",
             min_value=0.0,
             value=0.0,
             step=1.0,
             format="%.2f",
             help=(
-                "Soma dos tecidos, matérias-primas, "
-                "aviamentos e demais materiais."
+                "Informe o valor total dos tecidos, matérias-primas, "
+                "aviamentos e demais materiais usados no lote."
             ),
         )
 
         custo_mao_obra = st.number_input(
-            "Mão de obra",
+            "Total de mão de obra do lote",
             min_value=0.0,
             value=0.0,
             step=1.0,
             format="%.2f",
+            help=(
+                "Informe o custo total da mão de obra referente "
+                "à produção do lote."
+            ),
         )
 
     with coluna2:
         custo_embalagem = st.number_input(
-            "Embalagem",
+            "Total de embalagens do lote",
             min_value=0.0,
             value=0.0,
             step=1.0,
             format="%.2f",
+            help=(
+                "Informe o valor total gasto com embalagens "
+                "para todas as peças do lote."
+            ),
         )
 
         outros_custos = st.number_input(
-            "Outros custos diretos",
+            "Outros custos diretos do lote",
             min_value=0.0,
             value=0.0,
             step=1.0,
             format="%.2f",
         )
 
-    custo_direto_exibicao = (
-        custo_insumos
-        + custo_mao_obra
-        + custo_embalagem
-        + outros_custos
+    # Valores exibidos dinamicamente no formulário
+    custo_direto_total_exibicao = (
+        float(custo_insumos)
+        + float(custo_mao_obra)
+        + float(custo_embalagem)
+        + float(outros_custos)
     )
 
-    st.info(
-        f"Custo direto calculado: "
-        f"**{formatar_moeda(custo_direto_exibicao)}**"
+    custo_direto_peca_exibicao = (
+        custo_direto_total_exibicao
+        / quantidade_produzida
     )
+
+    coluna_total, coluna_peca = st.columns(2)
+
+    with coluna_total:
+        st.info(
+            "Custo direto total do lote: "
+            f"**{formatar_moeda(custo_direto_total_exibicao)}**"
+        )
+
+    with coluna_peca:
+        st.info(
+            "Custo direto por peça: "
+            f"**{formatar_moeda(custo_direto_peca_exibicao)}**"
+        )
 
     st.subheader("Taxas e margem")
 
@@ -159,6 +209,10 @@ with st.form("form_calculadora"):
             max_value=99.0,
             value=30.0,
             step=1.0,
+            help=(
+                "Percentual do preço de venda que ficará "
+                "como margem de lucro."
+            ),
         )
 
     with coluna2:
@@ -185,6 +239,11 @@ with st.form("form_calculadora"):
         use_container_width=True,
     )
 
+
+# ==========================================================
+# REALIZAR E SALVAR O CÁLCULO
+# ==========================================================
+
 if calcular:
     try:
         produto = produtos_por_nome[produto_nome]
@@ -192,6 +251,7 @@ if calcular:
 
         inicio_mes = mes_referencia.replace(day=1).isoformat()
 
+        # Busca as despesas fixas cadastradas no mesmo mês
         resposta_despesas = (
             supabase.table("despesas")
             .select("valor")
@@ -205,22 +265,41 @@ if calcular:
             for item in (resposta_despesas.data or [])
         )
 
-        custo_direto = (
+        # Custos totais informados para toda a produção
+        custo_direto_total = (
             float(custo_insumos)
             + float(custo_mao_obra)
             + float(custo_embalagem)
             + float(outros_custos)
         )
 
-        rateio_fixo = despesas_mes / quantidade_produzida
-        custo_total = custo_direto + rateio_fixo
+        # Custo direto de uma única peça
+        custo_direto_por_peca = (
+            custo_direto_total
+            / quantidade_produzida
+        )
 
-        total_taxas = imposto + taxa_maquineta
+        # Rateio das despesas fixas por peça
+        rateio_fixo_por_peca = (
+            despesas_mes
+            / quantidade_produzida
+        )
+
+        # Custo completo de uma peça
+        custo_total_por_peca = (
+            custo_direto_por_peca
+            + rateio_fixo_por_peca
+        )
+
+        total_taxas = (
+            float(imposto)
+            + float(taxa_maquineta)
+        )
 
         percentual_total = (
-            margem
-            + imposto
-            + taxa_maquineta
+            float(margem)
+            + float(imposto)
+            + float(taxa_maquineta)
         ) / 100
 
         if percentual_total >= 1:
@@ -230,19 +309,45 @@ if calcular:
             )
             st.stop()
 
-        preco_venda = custo_total / (1 - percentual_total)
-        lucro_estimado = preco_venda * (margem / 100)
+        # Preserva margem e taxas dentro do preço final
+        preco_venda = (
+            custo_total_por_peca
+            / (1 - percentual_total)
+        )
+
+        valor_impostos = (
+            preco_venda
+            * float(imposto)
+            / 100
+        )
+
+        valor_maquineta = (
+            preco_venda
+            * float(taxa_maquineta)
+            / 100
+        )
+
+        lucro_estimado = (
+            preco_venda
+            * float(margem)
+            / 100
+        )
 
         st.session_state["ultimo_resultado"] = {
+            "produto": produto_nome,
+            "quantidade_produzida": quantidade_produzida,
             "despesas_mes": despesas_mes,
-            "rateio_fixo": rateio_fixo,
-            "custo_direto": custo_direto,
-            "custo_total": custo_total,
+            "custo_direto_total": custo_direto_total,
+            "custo_direto_por_peca": custo_direto_por_peca,
+            "rateio_fixo_por_peca": rateio_fixo_por_peca,
+            "custo_total_por_peca": custo_total_por_peca,
             "preco_venda": preco_venda,
+            "valor_impostos": valor_impostos,
+            "valor_maquineta": valor_maquineta,
             "lucro_estimado": lucro_estimado,
         }
 
-        resposta_calculo = supabase.rpc(
+        supabase.rpc(
             "salvar_calculo_precificacao",
             {
                 "p_empresa_id": empresa_id,
@@ -250,15 +355,17 @@ if calcular:
                 "p_mes_referencia": inicio_mes,
                 "p_quantidade_produzida": quantidade_produzida,
                 "p_despesas_fixas_mes": despesas_mes,
-                "p_rateio_fixo_por_peca": rateio_fixo,
+                "p_rateio_fixo_por_peca": rateio_fixo_por_peca,
+                # O banco guarda os totais informados por categoria
                 "p_custo_insumos": float(custo_insumos),
                 "p_custo_mao_obra": float(custo_mao_obra),
                 "p_custo_embalagem": float(custo_embalagem),
                 "p_outros_custos": float(outros_custos),
-                "p_custo_direto": custo_direto,
-                "p_custo_total_peca": custo_total,
+                # Estes campos são armazenados por peça
+                "p_custo_direto": custo_direto_por_peca,
+                "p_custo_total_peca": custo_total_por_peca,
                 "p_total_taxas_percentual": total_taxas,
-                "p_margem_varejo": margem,
+                "p_margem_varejo": float(margem),
                 "p_preco_varejo": preco_venda,
                 "p_lucro_varejo_estimado": lucro_estimado,
             },
@@ -266,7 +373,7 @@ if calcular:
 
         st.session_state["mensagem_calculo"] = (
             f"Cálculo do produto {produto_nome} "
-            f"salvo com sucesso."
+            "salvo com sucesso."
         )
 
         st.rerun()
@@ -274,39 +381,113 @@ if calcular:
     except Exception as exc:
         st.error(f"Erro ao calcular ou salvar: {exc}")
 
+
+# ==========================================================
+# RESULTADO DO ÚLTIMO CÁLCULO
+# ==========================================================
+
 resultado = st.session_state.get("ultimo_resultado")
 
 if resultado:
     st.subheader("Resultado do último cálculo")
 
+    st.caption(
+        f"Produto: {resultado['produto']} · "
+        f"Quantidade: {resultado['quantidade_produzida']} peças"
+    )
+
     coluna1, coluna2, coluna3 = st.columns(3)
 
     coluna1.metric(
-        "Custo direto",
-        formatar_moeda(resultado["custo_direto"]),
+        "Custo direto total do lote",
+        formatar_moeda(
+            resultado["custo_direto_total"]
+        ),
     )
 
     coluna2.metric(
-        "Rateio fixo por peça",
-        formatar_moeda(resultado["rateio_fixo"]),
+        "Custo direto por peça",
+        formatar_moeda(
+            resultado["custo_direto_por_peca"]
+        ),
     )
 
     coluna3.metric(
-        "Custo total por peça",
-        formatar_moeda(resultado["custo_total"]),
+        "Rateio fixo por peça",
+        formatar_moeda(
+            resultado["rateio_fixo_por_peca"]
+        ),
     )
 
-    coluna1, coluna2 = st.columns(2)
+    coluna1, coluna2, coluna3 = st.columns(3)
 
     coluna1.metric(
-        "Preço sugerido",
-        formatar_moeda(resultado["preco_venda"]),
+        "Custo total por peça",
+        formatar_moeda(
+            resultado["custo_total_por_peca"]
+        ),
     )
 
     coluna2.metric(
-        "Lucro estimado por unidade",
-        formatar_moeda(resultado["lucro_estimado"]),
+        "Preço sugerido",
+        formatar_moeda(
+            resultado["preco_venda"]
+        ),
     )
+
+    coluna3.metric(
+        "Lucro estimado por unidade",
+        formatar_moeda(
+            resultado["lucro_estimado"]
+        ),
+    )
+
+    with st.expander("Detalhamento do preço"):
+        tabela_detalhamento = pd.DataFrame(
+            [
+                {
+                    "Componente": "Custo direto por peça",
+                    "Valor": resultado["custo_direto_por_peca"],
+                },
+                {
+                    "Componente": "Rateio fixo por peça",
+                    "Valor": resultado["rateio_fixo_por_peca"],
+                },
+                {
+                    "Componente": "Impostos",
+                    "Valor": resultado["valor_impostos"],
+                },
+                {
+                    "Componente": "Taxa da maquineta",
+                    "Valor": resultado["valor_maquineta"],
+                },
+                {
+                    "Componente": "Margem de lucro",
+                    "Valor": resultado["lucro_estimado"],
+                },
+                {
+                    "Componente": "Preço final",
+                    "Valor": resultado["preco_venda"],
+                },
+            ]
+        )
+
+        st.dataframe(
+            tabela_detalhamento,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Valor": st.column_config.NumberColumn(
+                    "Valor",
+                    format="R$ %.2f",
+                ),
+            },
+        )
+
+
+# ==========================================================
+# HISTÓRICO
+# ==========================================================
 
 st.divider()
 st.subheader("Histórico de cálculos")
@@ -316,10 +497,13 @@ try:
         supabase.table("calculos_precificacao")
         .select(
             "id, produto_id, mes_referencia, "
-            "quantidade_produzida, custo_direto, "
-            "rateio_fixo_por_peca, custo_total_peca, "
-            "total_taxas_percentual, margem_varejo, "
-            "preco_varejo, lucro_varejo_estimado, criado_em"
+            "quantidade_produzida, despesas_fixas_mes, "
+            "custo_insumos, custo_mao_obra, "
+            "custo_embalagem, outros_custos, "
+            "custo_direto, rateio_fixo_por_peca, "
+            "custo_total_peca, total_taxas_percentual, "
+            "margem_varejo, preco_varejo, "
+            "lucro_varejo_estimado, criado_em"
         )
         .eq("empresa_id", empresa_id)
         .order("criado_em", desc=True)
@@ -336,10 +520,18 @@ try:
 
     if not historico:
         st.info("Nenhum cálculo foi salvo até o momento.")
+
     else:
         linhas_historico = []
 
         for calculo in historico:
+            custo_total_lote = (
+                float(calculo.get("custo_insumos") or 0)
+                + float(calculo.get("custo_mao_obra") or 0)
+                + float(calculo.get("custo_embalagem") or 0)
+                + float(calculo.get("outros_custos") or 0)
+            )
+
             linhas_historico.append(
                 {
                     "Produto": nomes_produtos.get(
@@ -348,13 +540,14 @@ try:
                     ),
                     "Mês": calculo["mes_referencia"],
                     "Quantidade": calculo["quantidade_produzida"],
-                    "Custo direto": float(
+                    "Custos do lote": custo_total_lote,
+                    "Custo direto/peça": float(
                         calculo["custo_direto"]
                     ),
-                    "Rateio fixo": float(
+                    "Rateio fixo/peça": float(
                         calculo["rateio_fixo_por_peca"]
                     ),
-                    "Custo total": float(
+                    "Custo total/peça": float(
                         calculo["custo_total_peca"]
                     ),
                     "Taxas (%)": float(
@@ -373,23 +566,29 @@ try:
                 }
             )
 
-        tabela_historico = pd.DataFrame(linhas_historico)
+        tabela_historico = pd.DataFrame(
+            linhas_historico
+        )
 
         st.dataframe(
             tabela_historico,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Custo direto": st.column_config.NumberColumn(
-                    "Custo direto",
+                "Custos do lote": st.column_config.NumberColumn(
+                    "Custos do lote",
                     format="R$ %.2f",
                 ),
-                "Rateio fixo": st.column_config.NumberColumn(
-                    "Rateio fixo",
+                "Custo direto/peça": st.column_config.NumberColumn(
+                    "Custo direto/peça",
                     format="R$ %.2f",
                 ),
-                "Custo total": st.column_config.NumberColumn(
-                    "Custo total",
+                "Rateio fixo/peça": st.column_config.NumberColumn(
+                    "Rateio fixo/peça",
+                    format="R$ %.2f",
+                ),
+                "Custo total/peça": st.column_config.NumberColumn(
+                    "Custo total/peça",
                     format="R$ %.2f",
                 ),
                 "Preço de venda": st.column_config.NumberColumn(
